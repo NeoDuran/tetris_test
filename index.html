@@ -1,133 +1,295 @@
-<style>
-    #next-piece {
-        border: 2px solid black;
-        width: 120px;
-        height: 120px;
-        position: relative;
-        margin-left: 20px;
-        display: inline-block;
-    }
-    
-    #next-piece .block {
-        position: absolute;
-        width: 30px;
-        height: 30px;
-        border: 1px solid white;
-    }
-</style>
-
-<script>
-// 오디오 객체 생성 및 볼륨 조절
-const moveSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
-const clearSound = new Audio('https://assets.mixkit.co/active_storage/sfx/1667/1667-preview.mp3');
-moveSound.volume = 0.3;
-clearSound.volume = 0.3;
-
-function drawBoard() {
-    // 기존 게임 보드 그리기
-    const gameBoard = document.getElementById('game-board');
-    gameBoard.innerHTML = '';
-    
-    // 보드의 기존 블록들 그리기
-    board.forEach((row, y) => {
-        row.forEach((value, x) => {
-            if (value) {
-                const block = document.createElement('div');
-                block.className = 'block';
-                block.style.backgroundColor = value;
-                block.style.left = x * BLOCK_SIZE + 'px';
-                block.style.top = y * BLOCK_SIZE + 'px';
-                gameBoard.appendChild(block);
-            }
-        });
-    });
-
-    // 현재 움직이는 블록 그리기
-    if (currentPiece) {
-        currentPiece.shape.forEach((row, y) => {
-            row.forEach((value, x) => {
-                if (value) {
-                    const block = document.createElement('div');
-                    block.className = 'block';
-                    block.style.backgroundColor = currentPiece.color;
-                    block.style.left = (currentPiece.x + x) * BLOCK_SIZE + 'px';
-                    block.style.top = (currentPiece.y + y) * BLOCK_SIZE + 'px';
-                    gameBoard.appendChild(block);
-                }
-            });
-        });
-    }
-
-    // 다음 블록 그리기
-    const nextBoard = document.getElementById('next-piece');
-    nextBoard.innerHTML = '';
-    if (nextPiece) {
-        nextPiece.shape.forEach((row, y) => {
-            row.forEach((value, x) => {
-                if (value) {
-                    const block = document.createElement('div');
-                    block.className = 'block';
-                    block.style.backgroundColor = nextPiece.color;
-                    // 다음 블록을 중앙에 위치시키기 위한 오프셋 계산
-                    const offsetX = (120 - nextPiece.shape[0].length * BLOCK_SIZE) / 2;
-                    const offsetY = (120 - nextPiece.shape.length * BLOCK_SIZE) / 2;
-                    block.style.left = (x * BLOCK_SIZE + offsetX) + 'px';
-                    block.style.top = (y * BLOCK_SIZE + offsetY) + 'px';
-                    nextBoard.appendChild(block);
-                }
-            });
-        });
-    }
-}
-
-function mergePiece() {
-    if (!currentPiece) return;
-    
-    currentPiece.shape.forEach((row, y) => {
-        row.forEach((value, x) => {
-            if (value) {
-                board[y + currentPiece.y][x + currentPiece.x] = currentPiece.color;
-            }
-        });
-    });
-    
-    // 효과음 재생
-    moveSound.currentTime = 0;
-    moveSound.play();
-    
-    clearLines();
-    currentPiece = null;
-}
-
-function clearLines() {
-    let linesCleared = 0;
-    
-    for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
-        if (board[y].every(cell => cell)) {
-            board.splice(y, 1);
-            board.unshift(Array(BOARD_WIDTH).fill(0));
-            linesCleared++;
-            y++;
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        #game-container {
+            display: flex;
+            align-items: flex-start;
+            gap: 20px;
         }
-    }
-    
-    if (linesCleared > 0) {
-        // 효과음 재생
-        clearSound.currentTime = 0;
-        clearSound.play();
-        
-        score += linesCleared * 100;
-        document.getElementById('score').textContent = score;
-    }
-}
+        #game-board {
+            width: 300px;
+            height: 600px;
+            border: 2px solid black;
+            position: relative;
+        }
+        #next-piece {
+            border: 2px solid black;
+            width: 120px;
+            height: 120px;
+            position: relative;
+        }
+        .block {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border: 1px solid white;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-board"></div>
+        <div>
+            <h3>다음 블록:</h3>
+            <div id="next-piece"></div>
+            <h3>점수: <span id="score">0</span></h3>
+        </div>
+    </div>
 
-// moveDown 함수에도 효과음 추가
-function moveDown() {
-    currentPiece.y++;
-    if (collision()) {
-        currentPiece.y--;
-        mergePiece();
-    }
-    drawBoard();
-}
-</script>
+    <script>
+        // 게임 상수
+        const BOARD_WIDTH = 10;
+        const BOARD_HEIGHT = 20;
+        const BLOCK_SIZE = 30;
+
+        // 게임 변수
+        let board = Array(BOARD_HEIGHT).fill().map(() => Array(BOARD_WIDTH).fill(0));
+        let score = 0;
+        let currentPiece = null;
+        let nextPiece = null;
+
+        // 테트리스 블록 정의
+        const PIECES = [
+            {
+                shape: [[1, 1, 1, 1]],
+                color: '#00f0f0'
+            },
+            {
+                shape: [[1, 1], [1, 1]],
+                color: '#f0f000'
+            },
+            {
+                shape: [[1, 1, 1], [0, 1, 0]],
+                color: '#a000f0'
+            },
+            {
+                shape: [[1, 1, 1], [1, 0, 0]],
+                color: '#f0a000'
+            },
+            {
+                shape: [[1, 1, 1], [0, 0, 1]],
+                color: '#0000f0'
+            },
+            {
+                shape: [[1, 1, 0], [0, 1, 1]],
+                color: '#00f000'
+            },
+            {
+                shape: [[0, 1, 1], [1, 1, 0]],
+                color: '#f00000'
+            }
+        ];
+
+        // 오디오 객체 생성
+        const moveSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
+        const clearSound = new Audio('https://assets.mixkit.co/active_storage/sfx/1667/1667-preview.mp3');
+        moveSound.volume = 0.3;
+        clearSound.volume = 0.3;
+
+        function createPiece() {
+            const piece = JSON.parse(JSON.stringify(PIECES[Math.floor(Math.random() * PIECES.length)]));
+            piece.x = Math.floor((BOARD_WIDTH - piece.shape[0].length) / 2);
+            piece.y = 0;
+            return piece;
+        }
+
+        function drawBoard() {
+            const gameBoard = document.getElementById('game-board');
+            gameBoard.innerHTML = '';
+            
+            // 보드의 기존 블록들 그리기
+            board.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        const block = document.createElement('div');
+                        block.className = 'block';
+                        block.style.backgroundColor = value;
+                        block.style.left = x * BLOCK_SIZE + 'px';
+                        block.style.top = y * BLOCK_SIZE + 'px';
+                        gameBoard.appendChild(block);
+                    }
+                });
+            });
+
+            // 현재 움직이는 블록 그리기
+            if (currentPiece) {
+                currentPiece.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            const block = document.createElement('div');
+                            block.className = 'block';
+                            block.style.backgroundColor = currentPiece.color;
+                            block.style.left = (currentPiece.x + x) * BLOCK_SIZE + 'px';
+                            block.style.top = (currentPiece.y + y) * BLOCK_SIZE + 'px';
+                            gameBoard.appendChild(block);
+                        }
+                    });
+                });
+            }
+
+            // 다음 블록 그리기
+            const nextBoard = document.getElementById('next-piece');
+            nextBoard.innerHTML = '';
+            if (nextPiece) {
+                nextPiece.shape.forEach((row, y) => {
+                    row.forEach((value, x) => {
+                        if (value) {
+                            const block = document.createElement('div');
+                            block.className = 'block';
+                            block.style.backgroundColor = nextPiece.color;
+                            const offsetX = (120 - nextPiece.shape[0].length * BLOCK_SIZE) / 2;
+                            const offsetY = (120 - nextPiece.shape.length * BLOCK_SIZE) / 2;
+                            block.style.left = (x * BLOCK_SIZE + offsetX) + 'px';
+                            block.style.top = (y * BLOCK_SIZE + offsetY) + 'px';
+                            nextBoard.appendChild(block);
+                        }
+                    });
+                });
+            }
+        }
+
+        function collision() {
+            return currentPiece.shape.some((row, y) => {
+                return row.some((value, x) => {
+                    if (!value) return false;
+                    const boardX = currentPiece.x + x;
+                    const boardY = currentPiece.y + y;
+                    return boardX < 0 || 
+                           boardX >= BOARD_WIDTH || 
+                           boardY >= BOARD_HEIGHT ||
+                           (boardY >= 0 && board[boardY][boardX]);
+                });
+            });
+        }
+
+        function mergePiece() {
+            if (!currentPiece) return;
+            
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        board[y + currentPiece.y][x + currentPiece.x] = currentPiece.color;
+                    }
+                });
+            });
+            
+            moveSound.currentTime = 0;
+            moveSound.play();
+            
+            clearLines();
+            currentPiece = null;
+        }
+
+        function clearLines() {
+            let linesCleared = 0;
+            
+            for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                if (board[y].every(cell => cell)) {
+                    board.splice(y, 1);
+                    board.unshift(Array(BOARD_WIDTH).fill(0));
+                    linesCleared++;
+                    y++;
+                }
+            }
+            
+            if (linesCleared > 0) {
+                clearSound.currentTime = 0;
+                clearSound.play();
+                
+                score += linesCleared * 100;
+                document.getElementById('score').textContent = score;
+            }
+        }
+
+        function moveDown() {
+            currentPiece.y++;
+            if (collision()) {
+                currentPiece.y--;
+                mergePiece();
+            }
+            drawBoard();
+        }
+
+        function moveLeft() {
+            currentPiece.x--;
+            if (collision()) {
+                currentPiece.x++;
+            }
+            drawBoard();
+        }
+
+        function moveRight() {
+            currentPiece.x++;
+            if (collision()) {
+                currentPiece.x--;
+            }
+            drawBoard();
+        }
+
+        function rotate() {
+            const oldShape = currentPiece.shape;
+            const newShape = currentPiece.shape[0].map((_, i) =>
+                currentPiece.shape.map(row => row[i]).reverse()
+            );
+            currentPiece.shape = newShape;
+            if (collision()) {
+                currentPiece.shape = oldShape;
+            }
+            drawBoard();
+        }
+
+        function gameLoop() {
+            if (!currentPiece) {
+                if (!nextPiece) {
+                    nextPiece = createPiece();
+                }
+                currentPiece = nextPiece;
+                nextPiece = createPiece();
+                if (collision()) {
+                    alert('게임 오버! 점수: ' + score);
+                    board = Array(BOARD_HEIGHT).fill().map(() => Array(BOARD_WIDTH).fill(0));
+                    score = 0;
+                    currentPiece = null;
+                    nextPiece = null;
+                    document.getElementById('score').textContent = '0';
+                    return;
+                }
+            }
+            moveDown();
+        }
+
+        // 키보드 이벤트 처리
+        document.addEventListener('keydown', event => {
+            if (!currentPiece) return;
+            
+            switch (event.key) {
+                case 'ArrowLeft':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                    moveRight();
+                    break;
+                case 'ArrowDown':
+                    moveDown();
+                    break;
+                case 'ArrowUp':
+                    rotate();
+                    break;
+                case ' ':
+                    while (!collision()) {
+                        currentPiece.y++;
+                    }
+                    currentPiece.y--;
+                    mergePiece();
+                    drawBoard();
+                    break;
+            }
+        });
+
+        // 게임 시작
+        setInterval(gameLoop, 1000);
+        drawBoard();
+    </script>
+</body>
+</html>
